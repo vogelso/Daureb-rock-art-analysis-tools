@@ -1,0 +1,519 @@
+############ Alle bestehenden Objekte löschen ##############
+
+	rm(list=ls(all=TRUE))
+
+
+
+############ Startverzeichnis für zu ladende Tabellen festlegen ##############
+if(Sys.getenv('computername') == "DESKTOP-GDA837G") setwd("E:/Statistik/R")
+if(Sys.getenv('computername') == "WIN7-AFR8-2") setwd("C:/Users/vogelso/Documents/Brandberg/Statistik/R")
+
+
+############ Alle Warnungen aus vorherigen Durchläufen löschen ##############
+
+	assign("last.warning", NULL, envir = baseenv())
+
+
+############ Alle Fehler aus vorherigen Durchläufen löschen ##############
+  try(stop(""),TRUE)
+
+
+######## Benötigte Pakete: ######
+
+### Suche und ggfs. Installation benötigter Pakete: 
+	list.of.packages <- c(
+					"stringr" 		# Paket vegan zur Berechnung des Simpson Index
+					)
+			
+	new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+	if(length(new.packages)) install.packages(new.packages)
+	
+	#laden der benötigten Pakete
+		require(stringr)
+
+
+	
+##creates an object from a data.frame listing the column names and location
+namesind=function(df){
+
+    temp1=names(df)
+    temp2=seq(1,length(temp1))
+    temp3=data.frame(temp1,temp2)
+    names(temp3)=c("VAR","COL")
+    return(temp3)
+    rm(temp1,temp2,temp3)
+}
+
+ni <- namesind # ni(Tabellenname) listet Spalten und Spaltennummer
+
+
+
+
+
+
+
+
+############ Tabellen einlesen ##############
+
+# Tabelle figures einlesen:
+	#  read.table(file.choose(),,sep=";", check.names=FALSE, header=TRUE,stringsAsFactors=FALSE)->Figures
+	 read.csv(file="4 Figures - 00 Access Export.csv",sep=";", dec=",", check.names=FALSE, header=TRUE,stringsAsFactors=FALSE)->Figures
+
+
+
+# ################## Da hier die Originale Figures-Tabelle bearbeitet wird, erst mal ein Backup! ########################
+# 
+# 	# Check ob in Backup ein Verzeichnis für den heutigen Tag angelegt wurde und Objekt mit Verzeichnis-Pfad anlegen
+# 	if(!file.exists(paste("Backups/",format(Sys.time(),"%Y-%m-%d"),sep="")))	# Check, ob in Backup ein Verzeichnis mit dem heutigen Datum besteht
+# 		dir.create(paste("Backups/",format(Sys.time(),"%Y-%m-%d"),sep="")) 	# und falls nicht, erstellen
+# 	folder.date	<- 	paste("Backups/",format(Sys.time(),"%Y-%m-%d"),sep="")
+# 
+# 	# Backup von "Figures" erstellen
+# 	write.table(Figures,file=paste(folder.date,"/4 Figures - 02 R Export Action Index_",format(Sys.time(),"%Y-%m-%d_%H%M"),".csv",sep=""),sep=";",row.names=FALSE)
+
+
+
+
+# Spalten Remarks 1 und Remarks 2 Zusammenführen
+	if("Remarks 1" %in% colnames(Figures) && "Remarks 2" %in% colnames(Figures)){
+
+	Figures[,"Remarks"] <- paste(Figures$"Remarks 1", Figures$"Remarks 2", sep=' ')
+
+
+	# Zusammenführungsartefakte entfernen:
+		# Zellen mit " " in leere Zellen umwandeln
+		Figures[which(Figures$Remarks == " "),"Remarks"] <- ""
+
+		# Leerzeichen am Zellenende entfernen
+		Figures$"Remarks"[grep(".* $",Figures$"Remarks")]	<- substr(Figures$"Remarks"[grep(".* $",Figures$"Remarks")], 1, nchar(Figures$"Remarks"[grep(".* $",Figures$"Remarks")])-1)	
+
+
+	# Remarks 1 und Remarks 2 löschen:
+	Figures$"Remarks 1" <- NULL
+	Figures$"Remarks 2" <- NULL
+	}
+
+
+	# Falls dieses Skript bereits durchlaufen wurde und die Tabelle (4 Figures - 03 R Export Superimposition.csv) mit Korrekturen 
+	# als "4 Figures - 00 Access Export.csv" gespeichert und hier wieder eingelesen wird, 
+	# gibt es eine Spalte Remarks und eine Spalte "Remarks Original". Remarks muss erst wieder Remarks Original überschrieben werden
+		if("Remarks Original" %in% colnames(Figures)){
+			Figures$Remarks <- Figures$"Remarks Original"
+		}
+
+
+
+
+############# Subjects extrahieren für die weitere Verwendung ##########
+
+	# In Remains können Subjects abgekürzt oder anders vorkommen, als in der Spalte Subjects. Diese können hier händisch eingetragen werden:
+		missing		<-	c("bovide","clay coat","equine","giant","bucks","humans","rhino","men","bovine","dassie","ele","hum","rem","obsc","thin line","antelopes","wom","elefant","nyala","serpent")
+ 
+	# Bei der Suche nach Überlagerungs-Einträgen in den Remarks soll nach gängigen Subjekt-Bezeichnungen gesucht werden. Hierfür wird die Spalte Subject herangezogen
+		Subjects		<-	as.vector(names(table(Figures$Subject)))
+		Subjects		<-	Subjects[vapply(strsplit(Subjects, "\\W+"), length, integer(1)) <=3]		# Alle Subjete aus mehr als einem Begriff raus
+		Subjects		<-	Subjects[grep("\\?", Subjects, invert=TRUE)] 					# Alle Fragezeichen raus
+		Subjects 		<- 	cbind(nchar(as.character(Subjects)),as.character(Subjects))
+		Subjects[,1]	<-	as.numeric(Subjects[,1])
+		missing		<-	cbind(nchar(missing),missing)
+		colnames(missing)	<-	NULL
+		Subjects		<-	rbind(missing,Subjects)
+		Subjects		<-	Subjects[order(as.numeric(Subjects[,1]),decreasing=TRUE),2]
+		Subjects		<-	paste0("(",paste0(Subjects,collapse="|"),")")
+
+
+
+
+
+	
+		
+
+		
+		
+		
+########## Coordinated Action ############
+
+	# Damit die Überlagerungs-Daten in eigene Spalten geschrieben werden können, müssen diese ggfs. erstellt werden:
+		if(!("Coordinated Action" %in% colnames(Figures))){
+			# Spalte Coordinated Action erstellen
+			Figures[,"Coordinated Action"] <- ""
+			}
+
+	    cat("Processing Entries in 'Coordinated Action'\n")	
+
+	# normalerweise liegen die Überlagerungen im folgenden Format vor (regulärer Ausdruck)
+
+		  pattern.ca1 		= paste0("[a-z0-9 ]*coord(.*?)(\\?|,|$)")	
+		  pattern.ca2 		= paste0("[. ]*",Subjects,"[. ]*[0-9.]+[. ]*(\\?|,|$)") #
+		  pattern.ca3 		= paste0("[. ]*",Subjects,"[. ]*(\\?|,|$)") #
+		  pattern.ca4 		= paste0("[. ]*[0-9.]+[. ]*(\\?|,|$)") #
+
+	# Patterns zu Suchmuster zusammenfügen 
+		 find.ca = paste0(pattern.ca1,"(",pattern.ca2,"|",pattern.ca3,"|",pattern.ca4,")*")
+
+			# Ergebnis ausgeben
+			# str_extract(Figures$Remarks[grep(find.ca,Figures$Remarks, ignore.case=TRUE)], regex(find.ca, ignore_case = TRUE))	
+
+	# Falls Spalte Coordinated Action exisitiert, alle enthaltenen Werte löschen
+		if(("Coordinated Action" %in% colnames(Figures))){
+			Figures$"Coordinated Action"	<- ""
+			}
+
+	# Das Ergebins in die Spalte Superposition Over schreiben
+		Figures$"Coordinated Action"[grep(find.ca,Figures$Remarks, ignore.case=TRUE)] 				<- str_extract(Figures$Remarks[grep(find.ca,Figures$Remarks, ignore.case=TRUE)], regex(find.ca, ignore_case = TRUE))
+
+	# Leerzeichen und Kommas am Anfang und Ende von Remarks entfernen
+		trim.pattern = "(^,+[[:space:]]+|^[[:space:]]+,+|,+[[:space:]]+$|[[:space:]]+,+|^[[:space:]]+|^,+|[[:space:]]+$|,+$)"
+		Figures$"Coordinated Action"[grep(trim.pattern,Figures$"Coordinated Action")]		<- gsub(trim.pattern,"",Figures$"Coordinated Action"[grep(trim.pattern,Figures$"Coordinated Action")])
+
+
+	# Ergebnis abgleichen:
+		Figures[grep("coordinated action",Figures$Remarks, ignore.case=TRUE)[1:200],c("Coordinated Action","Remarks")]
+
+
+
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		########## Attending to ##########
+		
+		# Damit die Werte in eigene Spalten geschrieben werden können, müssen diese ggfs. erstellt werden:
+		if(!("Attending to" %in% colnames(Figures))){
+		  # Spalte Attending To erstellen
+		  Figures[,"Attending To"] <- ""
+		}
+		
+		cat("Processing Entries in 'Attending to'\n")	
+		
+		# normalerweise liegen die Überlagerungen im folgenden Format vor (regulärer Ausdruck)
+		
+		pattern.at1 		= paste0("[a-z0-9 ]*(attending to|attend to) *(.*?)(\\?|,|$)")	
+		pattern.at2 		= paste0("[. ]*(attending to|attend to)*[. ]*",Subjects,"[. ]*[0-9.]+(\\?|,|$)") #
+		pattern.at3 		= paste0("[. ]*(attending to|attend to)*[. ]*",Subjects,"[. ]*(\\?|,|$)") #
+		pattern.at4 		= paste0("[. ]*(attending to|attend to)*[. ]*[0-9.]+[. ]*(\\?|,|$)") #
+		
+		# Patterns zu Suchmuster zusammenfügen 
+		find.at = paste0(pattern.at1,"(",pattern.at2,"|",pattern.at3,"|",pattern.at4,")*")
+		# Ergebnis ausgeben
+		# str_extract(Figures$Remarks[grep(find.at,Figures$Remarks)], regex(find.at, ignore_case = TRUE))	
+		
+		# Falls Spalte Superimposed Over exisitiert, alle enthaltenen Werte löschen
+		if(("Attending To" %in% colnames(Figures))){
+		  Figures$"Attending To"	<- ""
+		}
+		
+		# Das Ergebins in die Spalte Superposition Over schreiben
+		Figures$"Attending To"[grep(find.at,Figures$Remarks, ignore.case=TRUE)] <- str_extract(Figures$Remarks[grep(find.at,Figures$Remarks, ignore.case=TRUE)], regex(find.at, ignore_case = TRUE))
+		
+		# Leerzeichen und Kommas am Anfang und Ende von Remarks entfernen
+		trim.pattern = "(^,+[[:space:]]+|^[[:space:]]+,+|,+[[:space:]]+$|[[:space:]]+,+|^[[:space:]]+|^,+|[[:space:]]+$|,+$)"
+		Figures$"Attending To"[grep(trim.pattern,Figures$"Attending To")]		<- gsub(trim.pattern,"",Figures$"Attending To"[grep(trim.pattern,Figures$"Attending To")])
+		
+		# Ergebnis abgleichen:
+		Figures[grep("attending to",Figures$Remarks, ignore.case=TRUE)[1:200],c("Attending To","Remarks")]	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		########## Attended By ##########
+		
+		# Damit die Werte in eigene Spalten geschrieben werden können, müssen diese ggfs. erstellt werden:
+		if(!("Attended By" %in% colnames(Figures))){
+		  # Spalte Attended By erstellen
+		  Figures[,"Attended By"] <- ""
+		}
+		
+		cat("Processing Entries in 'Attended by'\n")	
+		
+		# normalerweise liegen die Überlagerungen im folgenden Format vor (regulärer Ausdruck)
+		
+		pattern.ab1 		= paste0("[a-z0-9 ]*(attended by) *(.*?)(\\?|,|$)")	
+		pattern.ab2 		= paste0("[. ]*(attended by)*[. ]*",Subjects,"[. ]*[0-9.]+(\\?|,|$)") #
+		pattern.ab3 		= paste0("[. ]*(attended by)*[. ]*",Subjects,"[. ]*(\\?|,|$)") #
+		pattern.ab4 		= paste0("[. ]*(attended by)*[. ]*[0-9.]+[. ]*(\\?|,|$)") #
+		
+		# Patterns zu Suchmuster zusammenfügen 
+		find.ab = paste0(pattern.ab1,"(",pattern.ab2,"|",pattern.ab3,"|",pattern.ab4,")*")
+		# Ergebnis ausgeben
+		# str_extract(Figures$Remarks[grep(find.ab,Figures$Remarks)], regex(find.ab, ignore_case = TRUE))	
+		
+		# Falls Spalte Superimposed Over exisitiert, alle enthaltenen Werte löschen
+		if(("Attended By" %in% colnames(Figures))){
+		  Figures$"Attended By"	<- ""
+		}
+		
+		# Das Ergebins in die Spalte Superposition Over schreiben
+		Figures$"Attended By"[grep(find.ab,Figures$Remarks, ignore.case=TRUE)] <- str_extract(Figures$Remarks[grep(find.ab,Figures$Remarks, ignore.case=TRUE)], regex(find.ab, ignore_case = TRUE))
+		
+		# Leerzeichen und Kommas am Anfang und Ende von Remarks entfernen
+		trim.pattern = "(^,+[[:space:]]+|^[[:space:]]+,+|,+[[:space:]]+$|[[:space:]]+,+|^[[:space:]]+|^,+|[[:space:]]+$|,+$)"
+		Figures$"Attended By"[grep(trim.pattern,Figures$"Attended By")]		<- gsub(trim.pattern,"",Figures$"Attended By"[grep(trim.pattern,Figures$"Attended By")])
+		
+		# Ergebnis abgleichen:
+		Figures[grep("attended by",Figures$Remarks, ignore.case=TRUE)[1:200],c("Attended By","Remarks")]	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+				
+		
+		
+		
+########## Unspecific Interaction ############
+
+	# Damit die Daten in eigene Spalten geschrieben werden können, müssen diese ggfs. erstellt werden:
+		if(!("Unspecific Interaction" %in% colnames(Figures))){
+			# Spalte Unspecific Interaction erstellen
+			Figures[,"Unspecific Interaction"] <- ""
+			}
+
+	    cat("Processing Entries in 'Interaction'\n")	
+
+	# normalerweise liegen die Überlagerungen im folgenden Format vor (regulärer Ausdruck)
+
+		  pattern.ia1 		= paste0("[a-z0-9 ]*interact(.*?)(\\?|,|$)")	
+		  pattern.ia2 		= paste0("[. ]*",Subjects,"[. ]*[0-9.]+[. ]*(\\?|,|$)") #
+		  pattern.ia3 		= paste0("[. ]*",Subjects,"[. ]*(\\?|,|$)") #
+		  pattern.ia4 		= paste0("[. ]*[0-9.]+[. ]*(\\?|,|$)") #
+
+	# Patterns zu Suchmuster zusammenfügen 
+		 find.ia = paste0(pattern.ia1,"(",pattern.ia2,"|",pattern.ia3,"|",pattern.ia4,")*")
+
+			# Ergebnis ausgeben
+			# str_extract_all(Figures$Remarks[grep(find.ia,Figures$Remarks, ignore.case=TRUE)], regex(find.ia, ignore_case = TRUE),simplify=TRUE)	
+
+	# Falls Spalte Interaction exisitiert, alle enthaltenen Werte löschen
+		if(("Unspecific Interaction" %in% colnames(Figures))){
+			Figures$"Unspecific Interaction"	<- ""
+			}
+
+	# Das Ergebins in die Spalte Superposition Over schreiben
+		Figures$"Unspecific Interaction"[grep(find.ia,Figures$Remarks, ignore.case=TRUE)] 				<- str_extract(Figures$Remarks[grep(find.ia,Figures$Remarks, ignore.case=TRUE)], regex(find.ia, ignore_case = TRUE))
+
+	# Leerzeichen und Kommas am Anfang und Ende von Interaction entfernen
+		trim.pattern = "(^,+[[:space:]]+|^[[:space:]]+,+|,+[[:space:]]+$|[[:space:]]+,+|^[[:space:]]+|^,+|[[:space:]]+$|,+$)"
+		Figures$"Unspecific Interaction"[grep(trim.pattern,Figures$"Unspecific Interaction")]		<- gsub(trim.pattern,"",Figures$"Unspecific Interaction"[grep(trim.pattern,Figures$"Unspecific Interaction")])
+
+		Figures[,"Unspecific Interaction"] <- gsub("^interaction","unspecific interaction",Figures[,"Unspecific Interaction"])
+		
+		
+	# Ergebnis abgleichen:
+		Figures[grep("interact",Figures$Remarks, ignore.case=TRUE)[1:200],c("Unspecific Interaction","Remarks")]
+
+		
+		
+		
+
+	
+		
+
+	
+		
+		########## Superimposed Over ##########
+		
+		
+		# Damit die Überlagerungs-Daten in eigene Spalten geschrieben werden können, müssen diese ggfs. erstellt werden:
+		if(!("Superimposed Over" %in% colnames(Figures))){
+		  # Spalte Superimposed Over erstellen
+		  Figures[,"Superimposed Over"] <- ""
+		}
+		
+		cat("Processing Entries in 'Superimposed Over'\n")	
+		
+		# normalerweise liegen die Überlagerungen im folgenden Format vor (regulärer Ausdruck)
+		
+		pattern.so1 		= paste0("[a-z0-9 ]*s\\.o\\.(.*?)(\\?|,|$)")	
+		pattern.so2 		= paste0("[. ]*[s.o.]*[. ]*",Subjects,"[. ]*[0-9.]+[ .]*(congruently|deliberately)?[. ]*(\\?|,|$)") #
+		pattern.so3 		= paste0("[. ]*[s.o.]*[. ]*",Subjects,"[. ]*(congruently|deliberately)*[. ]*(\\?|,|$)") #
+		pattern.so4 		= paste0("[. ]*[s.o.]*[. ]*[0-9.]+[. ]*(congruently|deliberately)*[. ]*(\\?|,|$)") #
+		
+		# Patterns zu Suchmuster zusammenfügen 
+		find.so = paste0(pattern.so1,"(",pattern.so2,"|",pattern.so3,"|",pattern.so4,")*")
+		# Ergebnis ausgeben
+		# str_extract(Figures$Remarks[grep(find.so,Figures$Remarks)], regex(find.so, ignore_case = TRUE))	
+		
+		# Falls Spalte Superimposed Over exisitiert, alle enthaltenen Werte löschen
+		if(("Superimposed Over" %in% colnames(Figures))){
+		  Figures$"Superimposed Over"	<- ""
+		}
+		
+		# Das Ergebins in die Spalte Superposition Over schreiben
+		Figures$"Superimposed Over"[grep(find.so,Figures$Remarks, ignore.case=TRUE)] 					<- str_extract(Figures$Remarks[grep(find.so,Figures$Remarks, ignore.case=TRUE)], regex(find.so, ignore_case = TRUE))
+		
+		# Leerzeichen und Kommas am Anfang und Ende von Remarks entfernen
+		trim.pattern = "(^,+[[:space:]]+|^[[:space:]]+,+|,+[[:space:]]+$|[[:space:]]+,+|^[[:space:]]+|^,+|[[:space:]]+$|,+$)"
+		Figures$"Superimposed Over"[grep(trim.pattern,Figures$"Superimposed Over")]		<- gsub(trim.pattern,"",Figures$"Superimposed Over"[grep(trim.pattern,Figures$"Superimposed Over")])
+		
+		# Ergebnis abgleichen:
+		Figures[grep("s\\.o\\.",Figures$Remarks, ignore.case=TRUE)[1:200],c("Superimposed Over","Remarks")]	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		########## Superimposed By ############
+		
+		# Damit die Überlagerungs-Daten in eigene Spalten geschrieben werden können, müssen diese ggfs. erstellt werden:
+		if(!("Superimposed By" %in% colnames(Figures))){
+		  # Spalte Superimposed By erstellen
+		  Figures[,"Superimposed By"] <- ""
+		}
+		
+		cat("Processing Entries in 'Superimposed By'\n")	
+		
+		# normalerweise liegen die Überlagerungen im folgenden Format vor (regulärer Ausdruck)
+		
+		pattern.sb1 		= paste0("[a-z0-9 ]*s\\.b\\.(.*?)(\\?|,|$)")	
+		pattern.sb2 		= paste0("[. ]*[s.b.]*[. ]*",Subjects,"[. ]*[0-9.]+[ .]*(congruently|deliberately)?[. ]*(\\?|,|$)") #
+		pattern.sb3 		= paste0("[. ]*[s.b.]*[. ]*",Subjects,"[. ]*(congruently|deliberately)*[. ]*(\\?|,|$)") #
+		pattern.sb4 		= paste0("[. ]*[s.b.]*[. ]*[0-9.]+[. ]*(congruently|deliberately)*[. ]*(\\?|,|$)") #
+		
+		# Patterns zu Suchmuster zusammenfügen 
+		find.sb = paste0(pattern.sb1,"(",pattern.sb2,"|",pattern.sb3,"|",pattern.sb4,")*")
+		# Ergebnis ausgeben
+		# str_extract(Figures$Remarks[grep(find.sb,Figures$Remarks, ignore.case=TRUE)], regex(find.sb, ignore_case = TRUE))	
+		
+		# Falls Spalte Superimposed By exisitiert, alle enthaltenen Werte löschen
+		if(("Superimposed By" %in% colnames(Figures))){
+		  Figures$"Superimposed By"	<- ""
+		}
+		
+		# Das Ergebins in die Spalte Superposition Over schreiben
+		Figures$"Superimposed By"[grep(find.sb,Figures$Remarks, ignore.case=TRUE)] 				<- str_extract(Figures$Remarks[grep(find.sb,Figures$Remarks, ignore.case=TRUE)], regex(find.sb, ignore_case = TRUE))
+		
+		# Leerzeichen und Kommas am Anfang und Ende von Remarks entfernen
+		trim.pattern = "(^,+[[:space:]]+|^[[:space:]]+,+|,+[[:space:]]+$|[[:space:]]+,+|^[[:space:]]+|^,+|[[:space:]]+$|,+$)"
+		Figures$"Superimposed By"[grep(trim.pattern,Figures$"Superimposed By")]		<- gsub(trim.pattern,"",Figures$"Superimposed By"[grep(trim.pattern,Figures$"Superimposed By")])
+		
+		# Ergebnis abgleichen:
+		Figures[grep("s\\.b\\.",Figures$Remarks, ignore.case=TRUE)[1:200],c("Superimposed By","Remarks")]	
+		
+		
+		
+		
+		
+	
+		
+		
+			
+		
+		
+
+
+########## Gegebenenfalls Remarks nach "Remarks Original" kopieren, anschließend Daten aus Remarks löschen
+
+		cat("Cleaning 'Remarks'\n")	
+		
+	# Remarks nach "Remarks Original" kopieren, falls Remarks Original noch nicht vorhanden ist 
+		if(!("Remarks Original" %in% colnames(Figures))){
+			Figures$"Remarks Original" 	<-	Figures$Remarks
+		}
+
+	###### s.o. Einträge aus Remarks löschen
+		Figures$Remarks[grep(find.so,Figures$Remarks, ignore.case=TRUE)]			<- str_replace(Figures$Remarks[grep(find.so,Figures$Remarks, ignore.case=TRUE)], regex(find.so, ignore_case = TRUE), "")
+
+	###### s.b. Einträge aus Remarks löschen
+		Figures$Remarks[grep(find.sb,Figures$Remarks, ignore.case=TRUE)]			<- str_replace(Figures$Remarks[grep(find.sb,Figures$Remarks, ignore.case=TRUE)], regex(find.sb, ignore_case = TRUE), "")
+
+	###### coordinated action Einträge aus Remarks löschen
+		Figures$Remarks[grep(find.ca,Figures$Remarks, ignore.case=TRUE)]			<- str_replace(Figures$Remarks[grep(find.ca,Figures$Remarks, ignore.case=TRUE)], regex(find.ca, ignore_case = TRUE), "")
+
+	###### interaction Einträge aus Remarks löschen
+		Figures$Remarks[grep(find.ia,Figures$Remarks, ignore.case=TRUE)]			<- str_replace(Figures$Remarks[grep(find.ia,Figures$Remarks, ignore.case=TRUE)], regex(find.ia, ignore_case = TRUE), "")
+
+
+	###### attending to Einträge aus Remarks löschen
+	Figures$Remarks[grep(find.at,Figures$Remarks, ignore.case=TRUE)]			<- str_replace(Figures$Remarks[grep(find.at,Figures$Remarks, ignore.case=TRUE)], regex(find.at, ignore_case = TRUE), "")
+	
+	###### attended by Einträge aus Remarks löschen
+	Figures$Remarks[grep(find.ab,Figures$Remarks, ignore.case=TRUE)]			<- str_replace(Figures$Remarks[grep(find.ab,Figures$Remarks, ignore.case=TRUE)], regex(find.ab, ignore_case = TRUE), "")
+	
+		
+	# Leerzeichen und Kommas am Anfang und Ende von Remarks entfernen
+		trim.pattern = "(^,+[[:space:]]+|^[[:space:]]+,+|,+[[:space:]]+$|[[:space:]]+,+|^[[:space:]]+|^,+|[[:space:]]+$|,+$)"
+		Figures$Remarks[grep(trim.pattern,Figures$Remarks)]		<- gsub(trim.pattern,"",Figures$Remarks[grep(trim.pattern,Figures$Remarks)])
+
+	## ggfs. doppelte Leerzeichen in Remarks entfernen
+		Figures$Remarks <-	gsub("  ","",Figures$Remarks)
+		
+	# Test, ob auch wirklich alle s.o. und s.b. in Remarks gefunden und verschoben wurden:
+		Figures$Remarks[grep("s\\.o\\.|s\\.b\\.",Figures$Remarks, ignore.case=TRUE)]
+
+
+	# "Remarks" an das Ende der Spaltenreihenfolge schieben
+		length.cols		<-	length(colnames(Figures))
+		pos.remarks		<-	match("Remarks",colnames(Figures))
+		Figures		<-	Figures[, c((1:ncol(Figures))[-pos.remarks],pos.remarks)]
+
+	# "Remarks Original" an das Ende der Spaltenreihenfolge schieben
+		length.cols			<-	length(colnames(Figures))
+		pos.remarks.orig		<-	match("Remarks Original",colnames(Figures))
+		Figures			<-	Figures[, c((1:ncol(Figures))[-pos.remarks.orig],pos.remarks.orig)]
+
+
+
+########## Speichern der Tabelle "4 Figures - 03 R Export Superimposition.csv" #########
+
+	# Check ob in Backup ein Verzeichnis für den heutigen Tag angelegt wurde und Objekt mit Verzeichnis-Pfad anlegen
+	if(!file.exists(paste("Backups/",format(Sys.time(),"%Y-%m-%d"),sep="")))	# Check, ob in Backup ein Verzeichnis mit dem heutigen Datum besteht
+		dir.create(paste("Backups/",format(Sys.time(),"%Y-%m-%d"),sep="")) 	# und falls nicht, erstellen
+	folder.date	<- 	paste("Backups/",format(Sys.time(),"%Y-%m-%d"),sep="")
+
+
+
+
+
+
+################## "Figures" als "4 Figures - 03 R Export Superimposition.csv" auf die Festplatte schreiben ########################
+
+	# fertige Tabelle als Datei speichern / auf die HDD schreiben:
+		write.table(Figures,file=paste(folder.date,"/4 Figures - 01 R Export Superimposition.csv_",format(Sys.time(),"%Y-%m-%d_%H%M"),".csv",sep=""),sep=";",row.names=FALSE)
+		write.table(Figures,file="4 Figures - 01 R Export Superimposition.csv",sep=";",row.names=FALSE)
+
+
+
+
+
+
+
+
+
+	# Test, ob auch wirklich alle s.o. und s.b. in Remarks gefunden und verschoben wurden:
+	test <-	Figures[grep("s\\.o\\.|s\\.b\\.|coord|interact",Figures$Remarks, ignore.case=TRUE),c("Site","Figure","Remarks")] # "Site","Figure",
+	if(nrow(test) != 0) print(test)
+
+	if(length(grep("-", Figures[,"Superimposed Over"])) != 0)	print(Figures[grep("-", Figures[,"Superimposed Over"]),c("Site","Figure","Superimposed Over")])
+	if(length(grep("-", Figures[,"Superimposed By"])) != 0)	print(Figures[grep("-", Figures[,"Superimposed By"]),c("Site","Figure","Superimposed By")])
+	if(length(grep("-", Figures[,"Coordinated Action"])) != 0)	print(Figures[grep("-", Figures[,"Coordinated Action"]),c("Site","Figure","Coordinated Action")])
+	if(length(grep("-", Figures[,"Unspecific Interaction"])) != 0)		print(Figures[grep("-", Figures[,"Unspecific Interaction"]),c("Site","Figure","Unspecific Interaction")])
+
+	cat("Script '004 Figures - 03 Superimpositioning.R' finished\n\n")
+##################   Skript Ende   ######################
+	
